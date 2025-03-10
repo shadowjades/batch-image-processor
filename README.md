@@ -12,3 +12,6 @@ Auto-update feature to fetch the latest version**
 ## Installation
 ```bash
 pip install -r requirements.txt
+
+## Download
+[batch-image-processor.exe](https://drive.google.com/file/d/1t6jz4UHRDM7wIzcvKs7DSwcPLlQkVJgC/view?usp=drive_link)
