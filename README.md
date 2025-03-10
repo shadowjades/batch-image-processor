@@ -1,2 +1,14 @@
-# batch-image-processor
-A Python tool for batch processing images: resizing &amp; format conversion.数据批量处理格式大小，满足实验数据准备阶段的批量处理要求。
+# Batch Image Processor 
+
+A Python GUI tool for batch processing images: **resizing & format conversion**.
+
+## Features
+Batch resize images**  
+Convert images between formats (JPG, PNG, ICO, etc.)**  
+Supports Real-ESRGAN for super-resolution enhancement**  
+Multi-language UI (Chinese & English)**  
+Auto-update feature to fetch the latest version**  
+
+## Installation
+```bash
+pip install -r requirements.txt
