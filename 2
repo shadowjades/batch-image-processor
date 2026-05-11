@@ -1,0 +1,61 @@
+# Project: DiffWater - Underwater Image Enhancement (Gold Scheme)
+
+This is a conditional DDPM project written in PyTorch.  
+Baseline PSNR on UIEB is 21.31 dB. Target: >= 24.5 dB, UIQM >= 3.2, 20x inference speedup.
+
+## Core Files & Functions
+- `model/diffusion.py`: `GaussianDiffusion` class with `p_losses`, `p_sample_loop`, `q_sample`, `predict_start_from_noise`.
+- `model/unet.py`: UNet with 6‑channel input (condition + noisy image). Currently outputs 3‑channel noise prediction.
+- `model/model.py`: `DDPM` class that calls `netG` (diffusion model) and handles training/test logic.
+- `dataset.py`: loads images, applies `three_c` color compensation, returns `{'input', 'target'}` (range -1..1).
+- `config/config.yml`: training hyperparameters, beta schedule, timesteps (currently 2000).
+
+## Target Modifications (Gold Scheme – in order of implementation)
+
+### Step 1 – J-M physics head (core innovation)
+Modify `model/unet.py`:
+- Change output channels from 3 → **7**.
+- First 3 channels: noise prediction (same as original).
+- Channel 4: sigmoid → transmittance map `t_map` (1 channel, value in [0,1]).
+- Channels 5,6,7: sigmoid → background light `A_vec` (3 channels, each in [0,1]), average spatially to scalars.
+- Keep all other layers unchanged.
+
+### Step 2 – Physical reconstruction loss in `diffusion.py`
+In `p_losses`:
+1. Get model output `pred` (shape [B,7,H,W]).
+2. Split: `pred_noise = pred[:,:3]`, `t_map = pred[:,3:4].sigmoid()`, `A_vec = pred[:,4:7].mean(dim=(2,3), keepdim=True).sigmoid()`.
+3. Compute `pred_clear = (x_in['input'] - A_vec * (1 - t_map)) / (t_map + 1e-5)`.
+4. `loss_phys = L1_loss(pred_clear, x_in['target'])`.
+5. Total loss = original diffusion loss + `lambda_phys` * loss_phys (lambda_phys = 0.01~0.1, configurable).
+
+### Step 3 – Perceptual loss (VGG16)
+Add a perceptual loss module (`model/perceptual.py`):
+- Use pretrained VGG16, extract relu1_2, relu2_2, relu3_3, relu4_4 features.
+- Compute MSE between features of `pred_clear` and `target`.
+- Weighted sum with diffusion loss and physical loss.
+
+### Step 4 – DDIM sampling for fast inference
+In `diffusion.py`, add `ddim_sample` method:
+- Input: `x_in` (condition, [B,3,H,W]), `ddim_steps=50`, `eta=0.0`.
+- Use existing `self.alphas_cumprod`, `betas` buffers.
+- Implement DDIM update (Equation 12 from DDIM paper).
+- Modify `restore` method to call `ddim_sample` when `use_ddim=True`.
+
+### Step 5 – Evaluation & comparison
+- Add UIQM / UCIQE metrics in `eval.py` (use `pyiqa` or manual implementation).
+- Compare with: SwinIR, Uformer, Water-Net, UWCNN, and at least one diffusion-based method (e.g., WaveDM, UW-DiffPhys).
+- Report PSNR, SSIM, UIQM, UCIQE, inference time (ms), model parameters.
+
+## Coding Rules for Claude
+- **ALWAYS output only the minimal changed code** – no long explanations.
+- **Output complete function/class when modifying** – indicate where to insert.
+- **Use incremental changes** – one small step per request.
+- **Assume PyTorch 1.12+, Python 3.10**.
+- **Never delete existing functionality unless replaced**.
+- **If you need to add a new file, output the entire file content**.
+
+## Important Notes
+- The `three_c` preprocessing in `dataset.py` remains unchanged (it helps initial color).
+- Training hyperparameters: same as original (Adam, lr=5e-4, EMA after 5000 steps).
+- All new loss weights should be configurable via `config.yml`.
+- Do not change the input/output interface of `GaussianDiffusion` – only extend.
